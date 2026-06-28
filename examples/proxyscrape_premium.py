@@ -9,11 +9,11 @@ Auth: customer-USER:PASS
 import asyncio
 from playwright.async_api import async_playwright
 
-# Get these from your ProxyScrape premium dashboard
-PROXY_HOST = "185.199.228.220"  # example IP from your proxy list
-PROXY_PORT = 7777               # port from your proxy list
-USERNAME = "customer-YOUR_USERNAME"
-PASSWORD = "YOUR_PASSWORD"
+# Get these from your ProxyScrape premium dashboard / API
+PROXY_HOST = "151.123.177.10"  # pick an IP from your proxy list
+PROXY_PORT = 3129               # HTTP port (3129), SOCKS5 port (1081)
+USERNAME = "YOUR_PROXY_USERNAME"
+PASSWORD = "YOUR_PROXY_PASSWORD"
 
 async def main():
     async with async_playwright() as p:

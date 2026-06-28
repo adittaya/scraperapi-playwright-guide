@@ -519,11 +519,72 @@ context = await browser.new_context(
 
 ---
 
+# ScrapeOps + Playwright Configuration
+
+ScrapeOps provides an **auto-rotating residential proxy gateway** that returns a fresh residential IP on every request — no IP list management needed.
+
+## Quick Reference
+
+| Feature | Value |
+|---------|-------|
+| Gateway | `residential-proxy.scrapeops.io:8181` |
+| Auth | username:password |
+| Auto-rotation | ✅ Every request |
+| Protocols | HTTP / HTTPS |
+| Country targeting | Via dashboard/API configuration |
+
+## Usage
+
+```python
+browser = await p.chromium.launch(
+    proxy={"server": "http://residential-proxy.scrapeops.io:8181"}
+)
+context = await browser.new_context(
+    ignore_https_errors=True,
+    http_credentials={
+        "username": "scrapeops",
+        "password": "YOUR_API_KEY",
+    }
+)
+```
+
+## IP Rotation Demo
+
+ScrapeOps rotates IPs automatically — each browser session gets a different residential IP:
+
+```
+Request 1: {"ip":"189.203.187.176"}  # Mexico
+Request 2: {"ip":"171.225.8.56"}     # Vietnam
+Request 3: {"ip":"83.110.143.224"}   # Iran
+Request 4: {"ip":"103.35.153.162"}   # Indonesia
+Request 5: {"ip":"41.13.182.128"}    # South Africa
+```
+
 ## Examples
 
-- [`examples/proxyscrape_residential.py`](examples/proxyscrape_residential.py) — Basic residential proxy example
-- [`examples/proxyscrape_residential_country.py`](examples/proxyscrape_residential_country.py) — Country-targeted residential proxy
-- [`examples/proxyscrape_premium.py`](examples/proxyscrape_premium.py) — Premium datacenter proxy example
+- [`examples/scrapeops_residential.py`](examples/scrapeops_residential.py) — Basic residential proxy
+- [`examples/scrapeops_rotation_test.py`](examples/scrapeops_rotation_test.py) — IP rotation demo
+
+---
+
+# Provider Comparison
+
+| Provider | Type | Auto-rotation | Residential IPs | Playwright Support |
+|----------|------|---------------|-----------------|-------------------|
+| **ScraperAPI** | Gateway (`:8001`) | ✅ | ✅ (premium=true) | ✅ Tested |
+| **ProxyScrape Premium** | IP list (individual) | ❌ Manual cycle | ❌ Datacenter only | ✅ Tested |
+| **ProxyScrape Residential** | Gateway (`rp.scrapegw.com:6060`) | ✅ | ✅ | ❌ No active sub |
+| **ScrapeOps** | Gateway (`residential-proxy.scrapeops.io:8181`) | ✅ | ✅ | ✅ Tested |
+
+---
+
+## Examples
+
+- [`examples/proxyscrape_residential.py`](examples/proxyscrape_residential.py) — ProxyScrape residential basic
+- [`examples/proxyscrape_residential_country.py`](examples/proxyscrape_residential_country.py) — ProxyScrape country-targeted
+- [`examples/proxyscrape_premium.py`](examples/proxyscrape_premium.py) — ProxyScrape premium datacenter
+- [`examples/scrapeops_residential.py`](examples/scrapeops_residential.py) — ScrapeOps residential basic
+- [`examples/scrapeops_rotation_test.py`](examples/scrapeops_rotation_test.py) — ScrapeOps IP rotation demo
 
 ---
 
