@@ -426,6 +426,107 @@ await asyncio.sleep(30)
 
 ---
 
+# ProxyScrape + Playwright Configuration
+
+ProxyScrape provides **Residential**, **Premium (Datacenter)**, **Dedicated**, and **Mobile** proxies. This section covers the two most common types used with Playwright.
+
+## Quick Reference
+
+| Feature | Residential | Premium Datacenter |
+|---------|-------------|-------------------|
+| Gateway | `rp.scrapegw.com:6060` | Individual IP:port from list |
+| Auth | username:password (dashboard) | username:password (dashboard) |
+| Protocols | HTTP, SOCKS5 | HTTP, SOCKS5 |
+| Country targeting | `-country-XX` appended to username | Via proxy list selection |
+| Sticky sessions | `-session-{id}-lifetime-{min}` appended to username | N/A |
+
+---
+
+## Residential Proxy
+
+ProxyScrape residential proxies use a **gateway** (`rp.scrapegw.com:6060`) with username/password auth from your dashboard.
+
+### Basic Residential
+
+```python
+browser = await p.chromium.launch(
+    proxy={"server": "http://rp.scrapegw.com:6060"}
+)
+context = await browser.new_context(
+    ignore_https_errors=True,
+    http_credentials={
+        "username": "YOUR_USERNAME",
+        "password": "YOUR_PASSWORD",
+    }
+)
+```
+
+### Country Targeting
+
+Append `-country-XX` to your username to target specific countries:
+
+```python
+http_credentials = {
+    "username": "YOUR_USERNAME-country-in",  # India
+    "password": "YOUR_PASSWORD",
+}
+```
+
+Available country codes include: `-country-us` (USA), `-country-in` (India), `-country-gb` (UK), `-country-de` (Germany), `-country-fr` (France), `-country-jp` (Japan), `-country-au` (Australia), `-country-br` (Brazil), and [many more](https://docs.proxyscrape.com/proxies/rp.scrapegw.com-using-a-specific-country-with-residential-proxies).
+
+### Sticky Sessions
+
+For session persistence (same IP), append session parameters to your username:
+
+```python
+# 5-minute sticky session
+http_credentials = {
+    "username": "YOUR_USERNAME-session-abc123-lifetime-5",
+    "password": "YOUR_PASSWORD",
+}
+```
+
+Combine with country targeting:
+
+```python
+http_credentials = {
+    "username": "YOUR_USERNAME-country-us-session-abc123-lifetime-10",
+    "password": "YOUR_PASSWORD",
+}
+```
+
+---
+
+## Premium Datacenter Proxy
+
+Premium datacenter proxies use a **proxy list** (individual IP:port pairs from your dashboard), not a single gateway.
+
+```python
+# Pick one IP:port from your premium proxy list
+browser = await p.chromium.launch(
+    proxy={"server": "http://185.199.228.220:7777"}
+)
+context = await browser.new_context(
+    ignore_https_errors=True,
+    http_credentials={
+        "username": "customer-YOUR_USERNAME",
+        "password": "YOUR_PASSWORD",
+    }
+)
+```
+
+> **Note:** The username format is typically `customer-{your_username}` for premium proxies. Check your dashboard for the exact format.
+
+---
+
+## Examples
+
+- [`examples/proxyscrape_residential.py`](examples/proxyscrape_residential.py) — Basic residential proxy example
+- [`examples/proxyscrape_residential_country.py`](examples/proxyscrape_residential_country.py) — Country-targeted residential proxy
+- [`examples/proxyscrape_premium.py`](examples/proxyscrape_premium.py) — Premium datacenter proxy example
+
+---
+
 ## Requirements
 
 ```txt
