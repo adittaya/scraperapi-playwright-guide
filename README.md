@@ -85,6 +85,120 @@ For **Playwright/Puppeteer/Selenium** automation, the **proxy port mode** is the
 
 ---
 
+## API Endpoint Mode (For Protected Domains)
+
+The proxy port blocks certain domains with "Protected domains may require premium=true" — even with `premium=true` set, some domains are blocked at the account level. The **API endpoint** (`api.scraperapi.com`) bypasses this restriction.
+
+### When to Use API Endpoint
+
+| Situation | Proxy Port | API Endpoint |
+|-----------|-----------|--------------|
+| Normal websites | ✅ Works | ✅ Works (more expensive) |
+| Protected domains | ❌ Blocked | ✅ Works |
+| Need click/scroll | ✅ Playwright | ❌ Static HTML only |
+| Session persistence | ✅ Cookies preserved | ❌ Per-request |
+| Cost | 1 credit/req (datacenter) | 1 credit (no render) / ~10 credits (render) |
+
+### Basic API Endpoint Usage
+
+The API endpoint is simple HTTP — no Playwright required for content extraction:
+
+```python
+import requests
+
+API_KEY = "YOUR_API_KEY"
+
+# Without render (datacenter proxy, 1 credit)
+resp = requests.get("http://api.scraperapi.com", params={
+    "api_key": API_KEY,
+    "url": "https://httpbin.org/ip",
+})
+print(resp.text)  # {"ip": "..."}
+
+# With render (headless browser, ~10 credits)
+resp = requests.get("http://api.scraperapi.com", params={
+    "api_key": API_KEY,
+    "url": "https://example.com/js-heavy-page",
+    "render": "true",
+})
+```
+
+### Hybrid: API Endpoint + Playwright for Interactive Pages
+
+When you need both protected-domain access *and* interactive automation:
+
+1. **Fetch** the page via API endpoint (`render=true`) to get the redirect URL + cookies
+2. **Inject** cookies into a Playwright context (no proxy)
+3. **Navigate** to the redirect URL and interact normally
+
+```python
+import asyncio
+import requests
+from playwright.async_api import async_playwright
+
+API_KEY = "YOUR_API_KEY"
+
+async def hybrid_approach(target_url: str):
+    # Step 1: Fetch via API endpoint (bypasses domain block)
+    resp = requests.get("http://api.scraperapi.com", params={
+        "api_key": API_KEY,
+        "url": target_url,
+        "render": "true",
+    }, timeout=90)
+    redirect_url = resp.headers.get("sa-final-url", target_url)
+    cookies = [
+        {"name": c.name, "value": c.value,
+         "domain": c.domain.lstrip(".") if c.domain else "example.com",
+         "path": c.path or "/"}
+        for c in resp.cookies
+    ]
+
+    # Step 2: Launch Playwright and inject cookies
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(headless=True, args=["--no-sandbox"])
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        )
+        if cookies:
+            await context.add_cookies(cookies)
+
+        # Step 3: Navigate to the redirect URL (no proxy needed)
+        page = await context.new_page()
+        await page.goto(redirect_url, wait_until="commit", timeout=60000)
+        print(f"Page URL: {page.url}")
+
+        # Now you can click, scroll, fill forms, etc.
+        # page.click("button#continue")
+        # page.wait_for_selector("div.result")
+
+        await browser.close()
+
+asyncio.run(hybrid_approach("https://example.com/protected-page"))
+```
+
+### Key Differences from Proxy Port
+
+- **No `http_credentials`** — authentication is via `api_key` query parameter
+- **No `ignore_https_errors=True`** — API endpoint returns HTTPS content directly
+- **No interactive browser** — API endpoint returns raw HTML (use `render=true` for JS rendering)
+- **Session via cookies** — extract `Set-Cookie` headers and inject into Playwright
+- **Redirect tracking** — `sa-final-url` response header reveals the final destination after all redirects
+
+### Cost Comparison
+
+| Mode | Credits |
+|------|---------|
+| Port mode (datacenter) | 1 |
+| Port mode (premium) | 10 |
+| Port mode (premium + render) | 25 |
+| API endpoint (no render) | 1 |
+| API endpoint (render) | ~10 |
+| Ultra premium | 30 |
+
+---
+
+
+
 ## Playwright Configuration
 
 ### The Right Way: `http_credentials` in Context
@@ -388,6 +502,9 @@ asyncio.run(main())
 | Error | Cause | Fix |
 |-------|-------|-----|
 | `401 Unauthorized` | Wrong API key format | Use **all lowercase** API key |
+| `500 Internal Server Error` | API endpoint with `urllib` | Use `requests` library instead of `urllib` |
+| `Protected domain` | Account-level domain block | Use API endpoint mode (`api.scraperapi.com?render=true`) instead of proxy port |
+| `"plan not allowed"` | Ultra premium not on plan | Fall back to `premium=true` or API endpoint |
 | `ERR_TUNNEL_CONNECTION_FAILED` | Proxy auth failure | Use `http_credentials` in context, not proxy URL |
 | `ERR_EMPTY_RESPONSE` | Rate limited or blocked domain | Wait 30s and retry; check credit balance |
 | `ERR_PROXY_CONNECTION_FAILED` | Wrong auth format | Username must start with `scraperapi[.params]` |
@@ -571,7 +688,8 @@ Request 5: {"ip":"41.13.182.128"}    # South Africa
 
 | Provider | Type | Auto-rotation | Residential IPs | Playwright Support |
 |----------|------|---------------|-----------------|-------------------|
-| **ScraperAPI** | Gateway (`:8001`) | ✅ | ✅ (premium=true) | ✅ Tested |
+| **ScraperAPI** (port) | Gateway (`:8001`) | ✅ | ✅ (premium=true) | ✅ Tested |
+| **ScraperAPI** (API) | Endpoint (`api.scraperapi.com`) | ✅ | ✅ (render=true) | ✅ Hybrid (cookie injection) |
 | **ProxyScrape Premium** | IP list (individual) | ❌ Manual cycle | ❌ Datacenter only | ✅ Tested |
 | **ProxyScrape Residential** | Gateway (`rp.scrapegw.com:6060`) | ✅ | ✅ | ❌ No active sub |
 | **ScrapeOps** | Gateway (`residential-proxy.scrapeops.io:8181`) | ✅ | ✅ | ✅ Tested |
@@ -580,9 +698,20 @@ Request 5: {"ip":"41.13.182.128"}    # South Africa
 
 ## Examples
 
+### ScraperAPI
+- [`examples/basic_usage.py`](examples/basic_usage.py) — Basic proxy port test
+- [`examples/premium_residential.py`](examples/premium_residential.py) — Premium residential India proxy
+- [`examples/playwright_integration.py`](examples/playwright_integration.py) — Full Playwright integration
+- [`examples/error_handling.py`](examples/error_handling.py) — Retry logic and error handling
+- [`examples/api_endpoint_basic.py`](examples/api_endpoint_basic.py) — API endpoint basic usage
+- [`examples/api_endpoint_protected_domains.py`](examples/api_endpoint_protected_domains.py) — API endpoint + Playwright hybrid for protected domains
+
+### ProxyScrape
 - [`examples/proxyscrape_residential.py`](examples/proxyscrape_residential.py) — ProxyScrape residential basic
 - [`examples/proxyscrape_residential_country.py`](examples/proxyscrape_residential_country.py) — ProxyScrape country-targeted
 - [`examples/proxyscrape_premium.py`](examples/proxyscrape_premium.py) — ProxyScrape premium datacenter
+
+### ScrapeOps
 - [`examples/scrapeops_residential.py`](examples/scrapeops_residential.py) — ScrapeOps residential basic
 - [`examples/scrapeops_rotation_test.py`](examples/scrapeops_rotation_test.py) — ScrapeOps IP rotation demo
 
@@ -592,11 +721,12 @@ Request 5: {"ip":"41.13.182.128"}    # South Africa
 
 ```txt
 playwright>=1.40.0
+requests>=2.31.0
 ```
 
 Install:
 ```bash
-pip install playwright
+pip install -r requirements.txt
 playwright install chromium
 ```
 
